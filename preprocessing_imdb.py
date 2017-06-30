@@ -1,4 +1,3 @@
-import json
 import re
 from collections import Counter
 import numpy as np
@@ -6,7 +5,6 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.utils import to_categorical
 from nltk import PunktSentenceTokenizer
 from nltk.tokenize.punkt import PunktParameters
-from os.path import join
 
 
 def clean_str(string):
@@ -38,11 +36,11 @@ def read_file(file):
             label_id = line[0]
 
             # texts
-            texts.append(" ".join(line[1:]))  # TODO: wenn filename dazwischen ist, entsprechend line[2:]
+            texts.append(" ".join(line[1:]))
             labels.append(label_id)
 
     print('Found %s texts.' % len(texts))
-    return texts, labels
+    return texts, labels, None
 
 
 def splits(text):
@@ -57,11 +55,10 @@ def sentence_tokenizer(text):
     :return: list of sentences (a sentence is a string)
     """
 
+    # imdb specific html tokenizer
+    text = text.replace("<br />", ". ")
+
     punkt_param = PunktParameters()
-    punkt_param.abbrev_types = {'zzgl', 'prof', 'ca', 'vj', 't', 'mio', 'sro', 'lv', 'io', 'ihv', 'bzw', 'usw', 'inkl',
-                                'zt', 'vh', 'dr', 'entspr', 'dem', 'fort', 'co', 'kg', 'zb', 'bspw', 'ua', 'rd', 'abs',
-                                'etc', 'tsd', 'z.b', 'evtl', '1', '2', '3', '4', '5', '6', '7', '8', '9', '19', '20',
-                                '21'}
     sentence_splitter = PunktSentenceTokenizer(punkt_param)
     return sentence_splitter.tokenize(text)
 
@@ -78,7 +75,7 @@ class SentenceLabelExamples(object):
 
     def __init__(self, x, y):
         self.x = x
-        self.y = to_categorical(y, num_classes=2)
+        self.y = np.array(y)
 
     def __getitem__(self, index):
         return self.x[index], self.y[index]
@@ -90,7 +87,7 @@ class SentenceLabelExamples(object):
         return self.x[0].shape[0]
 
 
-def load_sentences(inst_texts, inst_labels, labels, tokenizer, max_sentence_len, max_sentences_per_doc):
+def load_sentences(inst_texts, inst_labels, labels, tokenizer, max_sentence_len, max_sentences_per_doc, embeddings):
     """
     This method will return a list (x) that contains a list for each instance. One instance contains a list of 
     sentences. Each sentence is one np.array of length mxlen, with one index for each word.     
@@ -100,7 +97,7 @@ def load_sentences(inst_texts, inst_labels, labels, tokenizer, max_sentence_len,
     :param labels:
     :param tokenizer:
     :param max_sentence_len: 
-    :param max_sentences_per_doc: 
+    :param max_sentences_per_doc:
     :return: x is list (each item is one instance) of list (each item is a sentence) of np-arrays (sequence of word ids)
     """
     number_instances = len(inst_texts)
@@ -113,6 +110,7 @@ def load_sentences(inst_texts, inst_labels, labels, tokenizer, max_sentence_len,
         '''
         if not inst_labels[inst_idx] in labels:
             labels[inst_labels[inst_idx]] = len(labels)
+
         y[inst_idx] = labels[inst_labels[inst_idx]]
 
         '''
@@ -124,26 +122,15 @@ def load_sentences(inst_texts, inst_labels, labels, tokenizer, max_sentence_len,
 
         # sequence and pad each sentence
         sentences = tokenizer.texts_to_sequences(sentences)
-        sentences = list(pad_sequences(sentences, maxlen=max_sentence_len))
+        sentences = list(pad_sequences(sentences, maxlen=max_sentence_len, padding="post", truncating="post"))
 
         # pad sentence length
         for input_idx in range(min(max_sentences_per_doc, len(sentences))):
             inputs[input_idx][inst_idx] = sentences[input_idx]
 
-    return SentenceLabelExamples(inputs, y), labels
+    # sequences to word2vec matrix
+    inputs_matrix = [np.stack([np.stack([embeddings[word] if word in embeddings else embeddings[0]
+                                         for word in instance]) for instance in input_channel])
+                     for input_channel in inputs]
 
-
-@DeprecationWarning
-def mdsave(labels, vocab, outdir, save_base):
-    basename = join(outdir, save_base)
-
-    label_file = basename + '.labels'
-    print("Saving attested labels '%s'" % label_file)
-
-    with open(label_file, 'w') as f:
-        json.dump(labels, f)
-
-    vocab_file = basename + '.vocab'
-    print("Saving attested vocabulary '%s'" % vocab_file)
-    with open(vocab_file, 'w') as f:
-        json.dump(vocab, f)
+    return SentenceLabelExamples(inputs_matrix, y), labels
