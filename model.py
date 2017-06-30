@@ -46,7 +46,6 @@ def create_model(embedding_dim, max_sentences_per_doc, max_sentence_len, kernel_
         conv = Flatten()(conv)
         conv_blocks.append(conv)
     doc_modeling = Concatenate()(conv_blocks) if len(conv_blocks) > 1 else conv_blocks[0]
-
     doc_modeling = Dropout(dropout)(doc_modeling)
     doc_modeling = Dense(hidden_dims, activation="relu")(doc_modeling)
 

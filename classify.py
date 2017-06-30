@@ -11,7 +11,7 @@ from w2v import get_embeddings
 import gc
 
 # deactivate tensorflow warnings
-environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 '''
 argument parser

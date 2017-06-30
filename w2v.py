@@ -9,6 +9,7 @@ def readtospc(f):
         s.extend(ch)
         ch = f.read(1)
     s = s.decode('utf-8')
+
     return s.strip()
 
 
